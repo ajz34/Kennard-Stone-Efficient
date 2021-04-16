@@ -4,6 +4,7 @@ import ctypes
 import os
 import os.path as path
 from pathos.multiprocessing import ProcessingPool as Pool
+from sklearn.metrics import pairwise_distances
 
 
 prog_dir = path.dirname(path.abspath(__file__))
@@ -12,12 +13,16 @@ cpp_name = "ks_cpp"
 if not os.path.isfile(prog_dir + "/" + cpp_name + ".so"):
     current_dir = os.path.abspath(".")
     os.chdir(path.dirname(path.abspath(__file__)))
-    os.system("gcc -fopenmp -O3 -shared -o " + cpp_name + ".so " + cpp_name + ".c")
+    os.system("gcc -fPIC  -fopenmp -O3 -shared -o" + cpp_name + ".so " + cpp_name + ".c")
     os.chdir(current_dir)
 ks_cpp = np.ctypeslib.load_library(cpp_name + ".so", prog_dir)
 
 
-def get_dist(X):
+def get_dist_unsafe(X):
+    """
+    This implementation of distance matrix is fast but unsafe.
+    Numerical discrepency could occur rarely.
+    """
     dist = X @ X.T
     t = dist.diagonal().copy()
     dist *= -2
@@ -26,7 +31,7 @@ def get_dist(X):
     return np.sqrt(dist)
 
 
-def ks_sampling(X, seed=None, n_result=None, get_dist=get_dist, backend="C"):
+def ks_sampling(X, seed=None, n_result=None, get_dist=pairwise_distances, backend="C"):
     """
     ks_sampling_general(X, seed=None, n_result=None, backend="C")
 
@@ -51,7 +56,7 @@ def ks_sampling(X, seed=None, n_result=None, get_dist=get_dist, backend="C"):
     get_dist: function
         A function `get_dist(X)` that will read original data, and
         return distance.
-        Default Implementation is Euclidean distance.
+        Default Implementation is scikit-learn Euclidean distance.
 
     backend: str, "Python" or "C"
         Specify Kennard-Stone sampling function backend in Python
@@ -167,6 +172,8 @@ def ks_sampling_core(dist, seed, n_result):
     min_vals = np.zeros(n_sample, dtype=float)
     # --- Initialization ---
     result[:n_seed] = seed                   # - 1
+    for i in seed:
+        selected[i] = True
     if n_seed == 2:
         v_dist[0] = dist[seed[0], seed[1]]   # - 2
     min_vals[:] = dist[seed[0]]              # - 3
@@ -210,7 +217,6 @@ def ks_sampling_core_cpp(dist, seed=None, n_result=None):
     n_sample = dist.shape[0]
     if n_result is None:
         n_result = n_sample
-    n_seed = None
     if seed is None:
         seed = np.zeros(2, dtype=np.uintp)
         n_seed = 0
@@ -239,14 +245,12 @@ def ks_sampling_mem_core(X, seed, n_result):
     # Definition: Intermediate Variables
     n_seed = len(seed)
     n_sample = X.shape[0]
-    min_vals = remains = None
     
     # --- Initialization ---
     def sliced_dist(idx):
         tmp_X = X[remains] - X[idx]
         return np.sqrt(np.einsum("ia, ia -> i", tmp_X, tmp_X))
 
-    selected = [False] * n_sample
     remains = []
     for i in range(n_sample):
         if i not in seed:

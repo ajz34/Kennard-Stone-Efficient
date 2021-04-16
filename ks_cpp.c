@@ -25,12 +25,22 @@ void kennard_stone(double* cdist, size_t* seed, size_t* result, double* v_dist, 
     if (n_seed == 0) {
         size_t n_sample_2 = n_sample * n_sample;
         sup.val = -1.;
-        sup.index = 0;
+        sup.index = -1;
         #pragma omp parallel for reduction(maximum:sup)
         for (size_t i = 0; i < n_sample_2; ++i) {
             if (cdist[i] > sup.val) {
                 sup.val = cdist[i];
                 sup.index = i;
+            }
+        }
+        if (sup.index == 0) {  // Threading Safety Check
+            sup.val = -1.;
+            sup.index = -1;
+            for (size_t i = 0; i < n_sample_2; ++i) {
+                if (cdist[i] > sup.val) {
+                    sup.val = cdist[i];
+                    sup.index = i;
+                }
             }
         }
         seed[0] = sup.index / n_sample;
@@ -72,6 +82,17 @@ void kennard_stone(double* cdist, size_t* seed, size_t* result, double* v_dist, 
                 sup.val = min_vals[i];
             }
         }
+        if (sup.index == 0) {  // Threading Safety Check
+            sup.val = -1.;
+            sup.index = n_sample + 1;
+            for (size_t i = 0; i < n_sample; ++i) {
+                if (selected[i]) continue;
+                if (min_vals[i] > sup.val) {
+                    sup.index = i;
+                    sup.val = min_vals[i];
+                }
+            }
+        }
         v_dist[n - 1] = sup.val;
         selected[sup.index] = true;
         result[n] = sup.index;
@@ -92,7 +113,7 @@ double euclid_distance_vector(double* x1, double* x2, size_t n_feature) {
     	res += (*x1 - *x2) * (*x1 - *x2);
         ++x1, ++x2;
     } while (--n_feature);
-    return sqrtf(res);
+    return sqrt(res);
 }
 
 void kennard_stone_mem(double* X, size_t* seed, size_t* result, double* v_dist, size_t n_sample, size_t n_feature, size_t n_seed, size_t n_result) {
@@ -135,6 +156,17 @@ void kennard_stone_mem(double* X, size_t* seed, size_t* result, double* v_dist, 
             if (min_vals[i] > sup.val) {
                 sup.index = i;
                 sup.val = min_vals[i];
+            }
+        }
+        if (sup.index == 0) {  // Threading Safety Check
+            sup.val = -1.;
+            sup.index = 0;
+            for (size_t i = 0; i < n_sample; ++i) {
+                if (selected[i]) continue;
+                if (min_vals[i] > sup.val) {
+                    sup.index = i;
+                    sup.val = min_vals[i];
+                }
             }
         }
         v_dist[n - 1] = sup.val;
