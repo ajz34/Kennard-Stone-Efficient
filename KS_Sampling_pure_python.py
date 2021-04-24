@@ -134,6 +134,8 @@ def ks_sampling_core(dist, seed, n_result):
     min_vals = np.zeros(n_sample, dtype=float)
     # --- Initialization ---
     result[:n_seed] = seed                   # - 1
+    for i in seed:
+        selected[i] = True
     if n_seed == 2:
         v_dist[0] = dist[seed[0], seed[1]]   # - 2
     min_vals[:] = dist[seed[0]]              # - 3
@@ -154,18 +156,16 @@ def ks_sampling_mem_core(X, seed, n_result):
     # Definition: Output Variables
     result = np.zeros(n_result, dtype=int)
     v_dist = np.zeros(n_result, dtype=float)
-    
+
     # Definition: Intermediate Variables
     n_seed = len(seed)
     n_sample = X.shape[0]
-    min_vals = remains = None
-    
+
     # --- Initialization ---
     def sliced_dist(idx):
         tmp_X = X[remains] - X[idx]
         return np.sqrt(np.einsum("ia, ia -> i", tmp_X, tmp_X))
 
-    selected = [False] * n_sample
     remains = []
     for i in range(n_sample):
         if i not in seed:
@@ -174,7 +174,7 @@ def ks_sampling_mem_core(X, seed, n_result):
     if n_seed == 2:
         v_dist[0] = np.linalg.norm(X[seed[0]] - X[seed[1]])
     min_vals = sliced_dist(seed[0])
-    
+
     for n in seed:
         np.min(np.array([min_vals, sliced_dist(n)]), axis=0, out=min_vals)
     # --- Loop argmax minimum ---
@@ -183,7 +183,7 @@ def ks_sampling_mem_core(X, seed, n_result):
         result[n] = remains[sup_index]
         v_dist[n - 1] = min_vals[sup_index]
         remains.pop(sup_index)
-        min_vals[sup_index:-1] = min_vals[sup_index+1:]
+        min_vals[sup_index:-1] = min_vals[sup_index + 1:]
         min_vals = min_vals[:-1]
         np.min(np.array([min_vals, sliced_dist(result[n])]), axis=0, out=min_vals)
     return result, v_dist
