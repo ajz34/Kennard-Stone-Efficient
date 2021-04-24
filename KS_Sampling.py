@@ -129,18 +129,23 @@ def ks_sampling_mem(X, seed=None, n_result=None, backend="C", n_proc=4, n_batch=
         n_result = X.shape[0]
     # Find most distant sample indexes if no seed provided
     if seed is None or len(seed) == 0:
-        t = np.einsum("ia, ia -> i", X, X)
-        
+        # --- This function may have numerical instability if some data feature vector is almost the same
+        #
+        # t = np.einsum("ia, ia -> i", X, X)
+        #
+        # def get_dist_slice(sliceA, sliceB):
+        #     distAB = t[sliceA, None] - 2 * X[sliceA] @ X[sliceB].T + t[None, sliceB]
+        #     if sliceA == sliceB:
+        #         np.fill_diagonal(distAB, 0)
+        #     return np.sqrt(distAB)
+
         def get_dist_slice(sliceA, sliceB):
-            distAB = t[sliceA, None] - 2 * X[sliceA] @ X[sliceB].T + t[None, sliceB]
-            if sliceA == sliceB:
-                np.fill_diagonal(distAB, 0)
-            return np.sqrt(distAB)
+            return pairwise_distances(X[sliceA], X[sliceB])
         
         def get_maxloc_slice(slice_pair):
             dist_slice = get_dist_slice(slice_pair[0], slice_pair[1])
             max_indexes = np.unravel_index(np.argmax(dist_slice), dist_slice.shape)
-            return (dist_slice[max_indexes], max_indexes[0] + slice_pair[0].start, max_indexes[1] + slice_pair[1].start)
+            return dist_slice[max_indexes], max_indexes[0] + slice_pair[0].start, max_indexes[1] + slice_pair[1].start
         
         p = list(np.arange(0, n_sample, n_batch)) + [n_sample]
         slices = [slice(p[i], p[i+1]) for i in range(len(p) - 1)]
